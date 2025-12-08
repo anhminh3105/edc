@@ -11,17 +11,70 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Read environment variables at call time (not import time)
-api_key = os.environ.get("OPENAI_KEY")
-base_url = os.environ.get("OPENAI_API_BASE")
-model = os.environ.get("OPENAI_MODEL")
+# Global client for single-provider usage (optional)
+# These are read at import time but won't fail if not set.
+# For multi-provider parallel crawling, use create_openai_client() instead.
+_global_api_key = os.environ.get("OPENAI_KEY")
+_global_base_url = os.environ.get("OPENAI_API_BASE")
+_global_model = os.environ.get("OPENAI_MODEL")
 
-if not model:
-    raise ValueError("OPENAI_MODEL environment variable is not set. Run: source export_sambanova.sh or source export_google_ai.sh")
-if not api_key:
-    raise ValueError("OPENAI_KEY environment variable is not set.")
+# Only create global client if environment variables are set
+client = None
+if _global_api_key and _global_model:
+    client = openai.OpenAI(api_key=_global_api_key, base_url=_global_base_url)
 
-client = openai.OpenAI(api_key=api_key, base_url=base_url)
+
+def create_openai_client(config):
+    """Create an OpenAI client from a provider config dict.
+    
+    Args:
+        config: Dict containing OPENAI_KEY, OPENAI_API_BASE (optional), OPENAI_MODEL
+        
+    Returns:
+        Tuple of (OpenAI client, model name)
+    """
+    return openai.OpenAI(
+        api_key=config["OPENAI_KEY"],
+        base_url=config.get("OPENAI_API_BASE")
+    ), config.get("OPENAI_MODEL")
+
+
+def openai_chat_completion_with_client(client, model, system_prompt, history, temperature=0.1, max_tokens=512, max_retries=3):
+    """Make a chat completion call using a specific client and model.
+    
+    Args:
+        client: OpenAI client instance
+        model: Model name to use
+        system_prompt: System prompt (or None)
+        history: List of message dicts
+        temperature: Sampling temperature
+        max_tokens: Max tokens to generate
+        max_retries: Number of retries on failure
+        
+    Returns:
+        The content of the assistant's response
+    """
+    response = None
+    if system_prompt is not None:
+        messages = [{"role": "system", "content": system_prompt}] + history
+    else:
+        messages = history
+
+    retries = 0
+    while response is None:
+        try:
+            response = client.chat.completions.create(
+                model=model, messages=messages, temperature=temperature, max_tokens=max_tokens
+            )
+        except Exception as e:
+            retries += 1
+            logger.warning(f"API call failed (attempt {retries}/{max_retries}): {e}")
+            if retries >= max_retries:
+                logger.error(f"Max retries ({max_retries}) exceeded. Last error: {e}")
+                raise
+            time.sleep(5)
+    logging.debug(f"Model: {model}\nPrompt:\n {messages}\n Result: {response.choices[0].message.content}")
+    return response.choices[0].message.content
 
 
 
@@ -174,7 +227,18 @@ def generate_completion_transformers(
     return generated_texts
 
 
-def openai_chat_completion(system_prompt, history, temperature=0.1, max_tokens=512, max_retries=3):  
+def openai_chat_completion(system_prompt, history, temperature=0.1, max_tokens=512, max_retries=3):
+    """Make a chat completion call using the global client (from environment variables).
+    
+    Note: For multi-provider parallel crawling, use openai_chat_completion_with_client() instead.
+    """
+    if client is None:
+        raise ValueError(
+            "Global OpenAI client not initialized. "
+            "Either set OPENAI_KEY and OPENAI_MODEL environment variables, "
+            "or use openai_chat_completion_with_client() with a provider config."
+        )
+    
     response = None
     if system_prompt is not None:
         messages = [{"role": "system", "content": system_prompt}] + history
@@ -185,7 +249,7 @@ def openai_chat_completion(system_prompt, history, temperature=0.1, max_tokens=5
     while response is None:
         try:
             response = client.chat.completions.create(
-                model=model, messages=messages, temperature=temperature, max_tokens=max_tokens
+                model=_global_model, messages=messages, temperature=temperature, max_tokens=max_tokens
             )
         except Exception as e:
             retries += 1
@@ -194,5 +258,5 @@ def openai_chat_completion(system_prompt, history, temperature=0.1, max_tokens=5
                 logger.error(f"Max retries ({max_retries}) exceeded. Last error: {e}")
                 raise
             time.sleep(5)
-    logging.debug(f"Model: {model}\nPrompt:\n {messages}\n Result: {response.choices[0].message.content}")
+    logging.debug(f"Model: {_global_model}\nPrompt:\n {messages}\n Result: {response.choices[0].message.content}")
     return response.choices[0].message.content
