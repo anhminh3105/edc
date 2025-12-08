@@ -11,6 +11,19 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Read environment variables at call time (not import time)
+api_key = os.environ.get("OPENAI_KEY")
+base_url = os.environ.get("OPENAI_API_BASE")
+model = os.environ.get("OPENAI_MODEL")
+
+if not model:
+    raise ValueError("OPENAI_MODEL environment variable is not set. Run: source export_sambanova.sh or source export_google_ai.sh")
+if not api_key:
+    raise ValueError("OPENAI_KEY environment variable is not set.")
+
+client = openai.OpenAI(api_key=api_key, base_url=base_url)
+
+
 
 def free_model(model: AutoModelForCausalLM = None, tokenizer: AutoTokenizer = None):
     try:
@@ -161,19 +174,25 @@ def generate_completion_transformers(
     return generated_texts
 
 
-def openai_chat_completion(model, system_prompt, history, temperature=0, max_tokens=512):
-    openai.api_key = os.environ["OPENAI_KEY"]
+def openai_chat_completion(system_prompt, history, temperature=0.1, max_tokens=512, max_retries=3):  
     response = None
     if system_prompt is not None:
         messages = [{"role": "system", "content": system_prompt}] + history
     else:
         messages = history
+
+    retries = 0
     while response is None:
         try:
-            response = openai.chat.completions.create(
+            response = client.chat.completions.create(
                 model=model, messages=messages, temperature=temperature, max_tokens=max_tokens
             )
         except Exception as e:
+            retries += 1
+            logger.warning(f"API call failed (attempt {retries}/{max_retries}): {e}")
+            if retries >= max_retries:
+                logger.error(f"Max retries ({max_retries}) exceeded. Last error: {e}")
+                raise
             time.sleep(5)
     logging.debug(f"Model: {model}\nPrompt:\n {messages}\n Result: {response.choices[0].message.content}")
     return response.choices[0].message.content

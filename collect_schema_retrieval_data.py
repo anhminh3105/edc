@@ -38,11 +38,38 @@ def read_tekgen(tekgen_path):
     return json_dict_list
 
 
-def crawl_relation_definitions(json_dict_list, result_csv_path):
-    schema_definition_prompt_template = open("./prompt_templates/sd_template.txt").read()
-    schema_definition_few_shot_examples = open("./few_shot_examples/default/sd_few_shot_examples.txt").read()
+def load_checkpoint(checkpoint_path):
+    """Load checkpoint from file if it exists."""
+    if os.path.exists(checkpoint_path):
+        with open(checkpoint_path, "r") as f:
+            checkpoint = json.load(f)
+            return checkpoint.get("last_processed_idx", -1), set(checkpoint.get("collected_relations", []))
+    return -1, set()
 
-    collected_relations = set()
+
+def save_checkpoint(checkpoint_path, last_processed_idx, collected_relations):
+    """Save checkpoint to file."""
+    checkpoint = {
+        "last_processed_idx": last_processed_idx,
+        "collected_relations": list(collected_relations)
+    }
+    with open(checkpoint_path, "w") as f:
+        json.dump(checkpoint, f, indent=2)
+
+
+def crawl_relation_definitions(json_dict_list, result_csv_path, dataset_size):
+    schema_definition_prompt_template = open("./prompt_templates/sd_template.txt").read()
+    schema_definition_few_shot_examples = open("./few_shot_examples/example/sd_few_shot_examples.txt").read()
+
+    # Checkpoint file path (same directory as result, with .checkpoint.json extension)
+    checkpoint_path = result_csv_path + ".checkpoint.json"
+    
+    # Load checkpoint if available
+    last_processed_idx, collected_relations = load_checkpoint(checkpoint_path)
+    
+    if last_processed_idx >= 0:
+        print(f"Resuming from checkpoint: last processed index = {last_processed_idx}, "
+              f"collected relations = {len(collected_relations)}")
 
     if not os.path.exists(result_csv_path):
         result_csv = open(result_csv_path, "w")
@@ -52,9 +79,14 @@ def crawl_relation_definitions(json_dict_list, result_csv_path):
         result_csv = open(result_csv_path, "a")
         csv_writer = csv.writer(result_csv)
 
-    progress_bar = tqdm(total=5000)
-    for json_dict in json_dict_list:
-        if len(collected_relations) >= 5:
+    progress_bar = tqdm(total=dataset_size, initial=len(collected_relations))
+    
+    for idx, json_dict in enumerate(json_dict_list):
+        # Skip already processed entries
+        if idx <= last_processed_idx:
+            continue
+            
+        if len(collected_relations) >= dataset_size:
             break
         triples = json_dict["triples"]
         skip_flag = False
@@ -88,12 +120,22 @@ def crawl_relation_definitions(json_dict_list, result_csv_path):
             )
 
             output = llm_utils.openai_chat_completion(
-                "gpt-3.5-turbo",
                 system_prompt=None,
                 history=[{"role": "user", "content": filled_first_prompt}],
             )
             csv_writer.writerow([text, triples, present_relations, output])
             result_csv.flush()
+            
+            # Save checkpoint after each successful API call
+            save_checkpoint(checkpoint_path, idx, collected_relations)
+    
+    progress_bar.close()
+    result_csv.close()
+    
+    # Remove checkpoint file when completed successfully
+    if len(collected_relations) >= dataset_size and os.path.exists(checkpoint_path):
+        os.remove(checkpoint_path)
+        print(f"Crawling completed. Checkpoint file removed.")
 
 
 def collect_samples(df, dataset_size):
@@ -185,8 +227,8 @@ if __name__ == "__main__":
 
     entries = read_tekgen(tekgen_path)
 
-    if not os.path.exists(relation_definition_csv_path):
-        crawl_relation_definitions(entries, relation_definition_csv_path)
+    if not os.path.exists(relation_definition_csv_path) or os.path.getsize(relation_definition_csv_path) == 0:
+        crawl_relation_definitions(entries, relation_definition_csv_path, dataset_size)
 
     collected_samples = collect_samples(pd.read_csv(relation_definition_csv_path), dataset_size)
 
