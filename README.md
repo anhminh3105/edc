@@ -29,11 +29,7 @@ Our experiments with both automatic and human evaluation demonstrate that EDC ac
 EDC can be iteratively refined with **Schema Retriever**, which is trained in the same fashion as information retriever. It is able to retrieve schema components relevant to the input text. It is able to extract those more obscure schema components harder to identify on the surface. The retrived content, together with entities extracted with *Entity Extraction* and the entities and relations extracted from last run, together form a hint to enhance the performance of open information extraction. To train the **Schema Retriever**, download the TEKGEN dataset from [link](https://storage.googleapis.com/gresearch/kelm-corpus/updated-2021/quadruples-test.tsv) and run
 
 ```
-python collect_schema_retrieval_data.py \
-    --tekgen_path /path/to/tekgen
-    --relation_definition_csv_path /output/path/to/tekgen/relation/definitions
-    --dataset_size N
-    --output_path /output/dataset/path
+source export_google_ai.sh && python collect_schema_retrieval_data.py --tekgen_path quadruples-test.tsv --relation_definition_csv_path ./tekgen_relation_definitions --output_path ./output --sleep_duration 12
 ```
 
 to prepare a dataset and refer to [this repository](https://github.com/kamalkraj/e5-mistral-7b-instruct) for how to finetune the model.

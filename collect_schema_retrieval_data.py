@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import time
 from tqdm import tqdm
 import csv
 import json
@@ -57,7 +58,16 @@ def save_checkpoint(checkpoint_path, last_processed_idx, collected_relations):
         json.dump(checkpoint, f, indent=2)
 
 
-def crawl_relation_definitions(json_dict_list, result_csv_path, dataset_size):
+def crawl_relation_definitions(json_dict_list, result_csv_path, dataset_size, sleep_duration=1.0):
+    """
+    Crawl relation definitions from the dataset.
+    
+    Args:
+        json_dict_list: List of json dictionaries containing text and triples
+        result_csv_path: Path to save the result CSV
+        dataset_size: Target number of unique relations to collect
+        sleep_duration: Time to sleep between API calls (in seconds) to prevent rate limiting
+    """
     schema_definition_prompt_template = open("./prompt_templates/sd_template.txt").read()
     schema_definition_few_shot_examples = open("./few_shot_examples/example/sd_few_shot_examples.txt").read()
 
@@ -128,6 +138,10 @@ def crawl_relation_definitions(json_dict_list, result_csv_path, dataset_size):
             
             # Save checkpoint after each successful API call
             save_checkpoint(checkpoint_path, idx, collected_relations)
+            
+            # Sleep to prevent rate limiting
+            if sleep_duration > 0:
+                time.sleep(sleep_duration)
     
     progress_bar.close()
     result_csv.close()
@@ -217,6 +231,8 @@ if __name__ == "__main__":
     parser.add_argument("--relation_definition_csv_path", help="Output path of relation definition of tekgen")
     parser.add_argument("--dataset_size", default=50000, type=int)
     parser.add_argument("--output_path", default="./schema_retriever_dataset")
+    parser.add_argument("--sleep_duration", default=1.0, type=float, 
+                        help="Time to sleep between API calls in seconds to prevent rate limiting (default: 1.0)")
 
     args = parser.parse_args()
 
@@ -224,11 +240,14 @@ if __name__ == "__main__":
     relation_definition_csv_path = args.relation_definition_csv_path
     dataset_size = args.dataset_size
     output_path = args.output_path
+    sleep_duration = args.sleep_duration
 
     entries = read_tekgen(tekgen_path)
 
-    if not os.path.exists(relation_definition_csv_path) or os.path.getsize(relation_definition_csv_path) == 0:
-        crawl_relation_definitions(entries, relation_definition_csv_path, dataset_size)
+    # Run crawl if: CSV doesn't exist, CSV is empty, OR a checkpoint file exists (indicating incomplete crawl)
+    checkpoint_path = relation_definition_csv_path + ".checkpoint.json"
+    if not os.path.exists(relation_definition_csv_path) or os.path.getsize(relation_definition_csv_path) == 0 or os.path.exists(checkpoint_path):
+        crawl_relation_definitions(entries, relation_definition_csv_path, dataset_size, sleep_duration)
 
     collected_samples = collect_samples(pd.read_csv(relation_definition_csv_path), dataset_size)
 
