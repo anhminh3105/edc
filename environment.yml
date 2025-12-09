@@ -209,7 +209,8 @@ dependencies:
   - zlib=1.2.13
   - zstd=1.5.5
   - pip:
-      - accelerate==0.29.1
+      - accelerate>=0.25.0
+      - bitsandbytes>=0.41.0
       - annotated-types==0.6.0
       - anyio==4.3.0
       - beautifulsoup4==4.12.3
