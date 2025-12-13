@@ -28,9 +28,7 @@ from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 
-# Default model configurations
-DEFAULT_LLM_MODEL = "mistralai/Mistral-7B-Instruct-v0.3"
-DEFAULT_EMBEDDER_MODEL = "BAAI/bge-small-en-v1.5"
+# Default quantization (models must be set via environment variables)
 DEFAULT_QUANTIZATION = "4bit"
 
 
@@ -94,12 +92,24 @@ class LocalLLMManager:
             return None
     
     def get_llm_model_name(self) -> str:
-        """Get the LLM model name from environment or default."""
-        return os.environ.get("LOCAL_LLM_MODEL", DEFAULT_LLM_MODEL)
+        """Get the LLM model name from environment variable."""
+        model_name = os.environ.get("LOCAL_LLM_MODEL")
+        if not model_name:
+            raise ValueError(
+                "LOCAL_LLM_MODEL environment variable is not set. "
+                "Run: source export_local_llm.sh"
+            )
+        return model_name
     
     def get_embedder_model_name(self) -> str:
-        """Get the embedder model name from environment or default."""
-        return os.environ.get("LOCAL_EMBEDDER_MODEL", DEFAULT_EMBEDDER_MODEL)
+        """Get the embedder model name from environment variable."""
+        model_name = os.environ.get("LOCAL_EMBEDDER_MODEL")
+        if not model_name:
+            raise ValueError(
+                "LOCAL_EMBEDDER_MODEL environment variable is not set. "
+                "Run: source export_local_llm.sh"
+            )
+        return model_name
     
     def load_llm(self, model_name: Optional[str] = None, force_reload: bool = False) -> Tuple[AutoModelForCausalLM, AutoTokenizer]:
         """

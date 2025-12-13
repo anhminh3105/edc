@@ -46,6 +46,7 @@ dependencies:
   - cuda-nvtx=12.1.105
   - cuda-opencl=12.4.127
   - cuda-runtime=12.1.0
+  - cuda-toolkit=12.1
   - datasets=2.12.0
   - debugpy=1.6.7
   - decorator=5.1.1

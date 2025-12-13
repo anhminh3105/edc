@@ -5,11 +5,30 @@ import logging
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+# Check for local LLM mode and set appropriate defaults
+USE_LOCAL_LLM = os.environ.get("USE_LOCAL_LLM", "").lower() == "true"
+
+# Default models - configured via environment variables when in local LLM mode
+if USE_LOCAL_LLM:
+    DEFAULT_LLM = os.environ.get("LOCAL_LLM_MODEL")
+    DEFAULT_EMBEDDER = os.environ.get("LOCAL_EMBEDDER_MODEL")
+    
+    if not DEFAULT_LLM:
+        raise ValueError(
+            "LOCAL_LLM_MODEL environment variable is not set. "
+            "Run: source export_local_llm.sh"
+        )
+    if not DEFAULT_EMBEDDER:
+        raise ValueError(
+            "LOCAL_EMBEDDER_MODEL environment variable is not set. "
+            "Run: source export_local_llm.sh"
+        ) 
+
 if __name__ == "__main__":
     parser = ArgumentParser()
     # OIE module setting
     parser.add_argument(
-        "--oie_llm", default="mistralai/Mistral-7B-Instruct-v0.2", help="LLM used for open information extraction."
+        "--oie_llm", default=DEFAULT_LLM, help="LLM used for open information extraction."
     )
     parser.add_argument(
         "--oie_prompt_template_file_path",
@@ -24,7 +43,7 @@ if __name__ == "__main__":
 
     # Schema Definition setting
     parser.add_argument(
-        "--sd_llm", default="mistralai/Mistral-7B-Instruct-v0.2", help="LLM used for schema definition."
+        "--sd_llm", default=DEFAULT_LLM, help="LLM used for schema definition."
     )
     parser.add_argument(
         "--sd_prompt_template_file_path",
@@ -40,11 +59,11 @@ if __name__ == "__main__":
     # Schema Canonicalization setting
     parser.add_argument(
         "--sc_llm",
-        default="mistralai/Mistral-7B-Instruct-v0.2",
+        default=DEFAULT_LLM,
         help="LLM used for schema canonicaliztion verification.",
     )
     parser.add_argument(
-        "--sc_embedder", default="intfloat/e5-mistral-7b-instruct", help="Embedder used for schema canonicalization. Has to be a sentence transformer. Please refer to https://sbert.net/"
+        "--sc_embedder", help="Embedder used for schema canonicalization. Has to be a sentence transformer. Please refer to https://sbert.net/"
     )
     parser.add_argument(
         "--sc_prompt_template_file_path",
@@ -55,7 +74,7 @@ if __name__ == "__main__":
     # Refinement setting
     parser.add_argument("--sr_adapter_path", default=None, help="Path to adapter of schema retriever.")
     parser.add_argument(
-        "--sr_embedder", default="intfloat/e5-mistral-7b-instruct", help="Embedding model used for schema retriever. Has to be a sentence transformer. Please refer to https://sbert.net/"
+        "--sr_embedder", help="Embedding model used for schema retriever. Has to be a sentence transformer. Please refer to https://sbert.net/"
     )
     parser.add_argument(
         "--oie_refine_prompt_template_file_path",
@@ -68,7 +87,7 @@ if __name__ == "__main__":
         help="Few shot examples used for refined open information extraction.",
     )
     parser.add_argument(
-        "--ee_llm", default="mistralai/Mistral-7B-Instruct-v0.2", help="LLM used for entity extraction."
+        "--ee_llm", default=DEFAULT_LLM, help="LLM used for entity extraction."
     )
     parser.add_argument(
         "--ee_prompt_template_file_path",
