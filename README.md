@@ -29,7 +29,34 @@ Our experiments with both automatic and human evaluation demonstrate that EDC ac
 EDC can be iteratively refined with **Schema Retriever**, which is trained in the same fashion as information retriever. It is able to retrieve schema components relevant to the input text. It is able to extract those more obscure schema components harder to identify on the surface. The retrived content, together with entities extracted with *Entity Extraction* and the entities and relations extracted from last run, together form a hint to enhance the performance of open information extraction. To train the **Schema Retriever**, download the TEKGEN dataset from [link](https://storage.googleapis.com/gresearch/kelm-corpus/updated-2021/quadruples-test.tsv) and run
 
 ```
-source export_google_ai.sh && python collect_schema_retrieval_data.py --tekgen_path quadruples-test.tsv --relation_definition_csv_path ./tekgen_relation_definitions --output_path ./output --sleep_duration 20
+source export_google_ai.sh && \
+  python collect_schema_retrieval_data.py \
+      --tekgen_path quadruples-test.tsv \
+      --relation_definition_csv_path ./tekgen_relation_definitions \
+      --output_path ./schema_retriever_dataset \
+      --sleep_duration 20 \
+      --log_level INFO
+```
+
+Below is a general-purpose template you can use to export your LLM service provider credentials as environment variables. Save this as `export_llm_api.sh` and **edit the placeholder values** to correspond to your own credentials and endpoints:
+
+```bash
+#!/bin/bash
+# LLM Service Provider Credentials (OpenAI-compatible endpoint)
+
+export OPENAI_KEY="YOUR_API_KEY_HERE"
+
+# Set your API base endpoint here (example is for Google AI Studio, but change as needed)
+export OPENAI_API_BASE="https://YOUR_PROVIDER_ENDPOINT_HERE/v1/openai/"
+
+# Optionally set the model, e.g. gemini-2.5-flash, gpt-3.5-turbo, etc.
+# export OPENAI_MODEL="YOUR_MODEL_NAME"
+
+# Example echo output (shows partially masked API key and endpoint info)
+echo "LLM service credentials exported successfully"
+echo "  OPENAI_KEY: \${OPENAI_KEY:0:8}..."
+echo "  OPENAI_API_BASE: \$OPENAI_API_BASE"
+echo "  OPENAI_MODEL: \$OPENAI_MODEL"
 ```
 
 to prepare a dataset and refer to [this repository](https://github.com/kamalkraj/e5-mistral-7b-instruct) for how to finetune the model.
