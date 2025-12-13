@@ -1,5 +1,6 @@
 import os
 import time
+import re
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 import ast
 from sentence_transformers import SentenceTransformer
@@ -156,6 +157,11 @@ def parse_relation_definition(raw_definitions: str):
 
         if relation == "Answer":
             continue
+
+        # Strip number prefix (e.g., "1. relation" -> "relation", "2. relation" -> "relation")
+        # This handles cases where the LLM outputs numbered lists like "1. university: ..."
+        if re.match(r"^\d+\.\s*", relation):
+            relation = re.sub(r"^\d+\.\s*", "", relation)
 
         relation_definition_dict[relation] = relation_description
     logger.debug(f"Relation Definitions {raw_definitions} parsed as {relation_definition_dict}")

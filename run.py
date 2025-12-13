@@ -22,7 +22,10 @@ if USE_LOCAL_LLM:
         raise ValueError(
             "LOCAL_EMBEDDER_MODEL environment variable is not set. "
             "Run: source export_local_llm.sh"
-        ) 
+        )
+else:
+    DEFAULT_LLM = None
+    DEFAULT_EMBEDDER = None 
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -63,7 +66,8 @@ if __name__ == "__main__":
         help="LLM used for schema canonicaliztion verification.",
     )
     parser.add_argument(
-        "--sc_embedder", help="Embedder used for schema canonicalization. Has to be a sentence transformer. Please refer to https://sbert.net/"
+        "--sc_embedder", default=DEFAULT_EMBEDDER,
+        help="Embedder used for schema canonicalization. Has to be a sentence transformer. Please refer to https://sbert.net/"
     )
     parser.add_argument(
         "--sc_prompt_template_file_path",
@@ -74,7 +78,8 @@ if __name__ == "__main__":
     # Refinement setting
     parser.add_argument("--sr_adapter_path", default=None, help="Path to adapter of schema retriever.")
     parser.add_argument(
-        "--sr_embedder", help="Embedding model used for schema retriever. Has to be a sentence transformer. Please refer to https://sbert.net/"
+        "--sr_embedder", default=DEFAULT_EMBEDDER,
+        help="Embedding model used for schema retriever. Has to be a sentence transformer. Please refer to https://sbert.net/"
     )
     parser.add_argument(
         "--oie_refine_prompt_template_file_path",
