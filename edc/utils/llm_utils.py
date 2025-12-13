@@ -139,6 +139,10 @@ def parse_raw_triplets(raw_triplets: str):
 
 
 def parse_relation_definition(raw_definitions: str):
+    # Handle NaN/None values
+    if not isinstance(raw_definitions, str) or not raw_definitions or raw_definitions.strip() == "":
+        return {}
+    
     descriptions = raw_definitions.split("\n")
     relation_definition_dict = {}
 

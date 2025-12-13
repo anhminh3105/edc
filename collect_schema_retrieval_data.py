@@ -81,13 +81,20 @@ def crawl_relation_definitions(json_dict_list, result_csv_path, dataset_size, sl
         print(f"Resuming from checkpoint: last processed index = {last_processed_idx}, "
               f"collected relations = {len(collected_relations)}")
 
+    # Check if file needs header (doesn't exist or is empty)
+    needs_header = not os.path.exists(result_csv_path) or os.path.getsize(result_csv_path) == 0
+    
     if not os.path.exists(result_csv_path):
         result_csv = open(result_csv_path, "w")
-        csv_writer = csv.writer(result_csv)
-        csv_writer.writerow(["text", "triplets", "relations", "definitions"])
     else:
         result_csv = open(result_csv_path, "a")
-        csv_writer = csv.writer(result_csv)
+    
+    csv_writer = csv.writer(result_csv)
+    
+    # Write header if needed
+    if needs_header:
+        csv_writer.writerow(["text", "triplets", "relations", "definitions"])
+        result_csv.flush()
 
     progress_bar = tqdm(total=dataset_size, initial=len(collected_relations))
     
@@ -157,12 +164,25 @@ def collect_samples(df, dataset_size):
     # relation_definitions: dict from relation to definitions
     collected_samples = []
 
+    # Skip incomplete rows (missing/blank definitions). We do not retry them.
+    if "definitions" in df.columns:
+        df = df[
+            df["definitions"].notna()
+            & df["definitions"].astype(str).str.strip().ne("")
+        ].reset_index(drop=True)
+
     relation_definition_dict_list = []
     aggregated_relation_definition_dict = {}
 
     for idx, row in df.iterrows():
         raw_definitions = row["definitions"]
         relation_definition_dict = llm_utils.parse_relation_definition(raw_definitions)
+        
+        # Skip rows with no valid definitions (e.g., API failures during crawling)
+        if not relation_definition_dict:
+            relation_definition_dict_list.append({})
+            continue
+            
         relation_definition_dict_list.append(relation_definition_dict)
         for relation, definition in relation_definition_dict.items():
             if relation not in aggregated_relation_definition_dict:
@@ -171,6 +191,10 @@ def collect_samples(df, dataset_size):
                 aggregated_relation_definition_dict[relation].append(definition)
 
     for row_idx, row in df.iterrows():
+        # Skip rows with no valid definitions
+        if not relation_definition_dict_list[row_idx]:
+            continue
+            
         text = row["text"]
         triples = ast.literal_eval(row["triplets"])
 
@@ -194,10 +218,7 @@ def collect_samples(df, dataset_size):
                     relation_triple_dict[relation] = [triple]
                 else:
                     relation_triple_dict[relation].append(triple)
-        # print(len(aggregated_relation_definition_dict))
         negative_relations = set(aggregated_relation_definition_dict.keys()) - positive_relations
-        # print(positive_relations)
-        # print(negative_relations)
         negative_relations = random.sample(list(negative_relations), len(positive_relations))
 
         positive_relations = list(positive_relations)
@@ -217,9 +238,7 @@ def collect_samples(df, dataset_size):
                 "negative_relation": negative_relations[idx],
                 "positive_triple": relation_triple_dict[positive_relations[idx]],
             }
-            # print(sample)
             collected_samples.append(sample)
-            print(sample)
             if len(collected_samples) >= dataset_size:
                 return collected_samples
     return collected_samples
@@ -229,7 +248,7 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--tekgen_path", help="Path to tekgen path")
     parser.add_argument("--relation_definition_csv_path", help="Output path of relation definition of tekgen")
-    parser.add_argument("--dataset_size", default=50000, type=int)
+    parser.add_argument("--dataset_size", default=796982, type=int)
     parser.add_argument("--output_path", default="./schema_retriever_dataset")
     parser.add_argument("--sleep_duration", default=1.0, type=float, 
                         help="Time to sleep between API calls in seconds to prevent rate limiting (default: 1.0)")
