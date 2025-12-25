@@ -121,6 +121,12 @@ if __name__ == "__main__":
         default="./schemas/example_schema.csv",
         help="File containing the target schema to align to.",
     )
+    parser.add_argument(
+        "--max_input_texts",
+        default=10,
+        type=int,
+        help="Maximum number of input texts to process. If not set, all texts are processed.",
+    )
     parser.add_argument("--refinement_iterations", default=0, type=int, help="Number of iteration to run.")
     parser.add_argument(
         "--enrich_schema",
@@ -139,6 +145,8 @@ if __name__ == "__main__":
     
 
     input_text_list = open(args["input_text_file_path"], "r").readlines()
+    if args["max_input_texts"] is not None:
+        input_text_list = input_text_list[:args["max_input_texts"]]
     output_kg = edc.extract_kg(
         input_text_list,
         args["output_dir"],
