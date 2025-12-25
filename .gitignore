@@ -166,3 +166,9 @@ cython_debug/
 *tekgen_relation_definitions*
 *.checkpoint.json
 *.tsv
+
+# llm endpoints credentials
+export_*.sh
+
+# cursor artefacts
+.cursor/
