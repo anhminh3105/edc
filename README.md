@@ -117,7 +117,42 @@ where `oie_llm` can take value from `gpt-3.5-turbo`, `gpt-4` and `mistralai/Mist
 
 You may use EDC on customized input and target schema by following the formats used in `datasets` and `schemas`. You may also tweak the prompt templates and few-shot examples used by changing `prompt_templates` and `few_shot_examples`. To be noted, if you would like to use OpenAI models, please set the environment variable `OPENAI_KEY` to your own API key. An example command to run EDC on an example dataset is given in `run.sh`.
 
+## Chunk-based Processing and Resumable Runs
 
+For large datasets, EDC supports processing input texts in chunks with the ability to resume interrupted runs. This is useful when processing takes a long time or when you want to parallelize across multiple runs.
+
+### Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--start_index` | 0 | Start index for input text processing (0-based, inclusive) |
+| `--end_index` | None | End index for input text processing (exclusive). If not set, uses `start_index + max_input_texts`, or processes to end if `max_input_texts` is also not set |
+| `--max_input_texts` | None | Maximum number of input texts to process from `start_index` |
+| `--append` | False | Append to existing output files instead of failing if output directory exists |
+| `--output_dir` | None | Output directory. Defaults to `./output_{dataset_name}` based on the input file name |
+
+### Examples
+
+```bash
+# Process all texts from example.txt (outputs to ./output_example/)
+python run.py --input_text_file_path ./datasets/example.txt
+
+# Process only the first 100 texts
+python run.py --input_text_file_path ./datasets/tekgen.txt --max_input_texts 100
+
+# Process texts 0-99 (first chunk)
+python run.py --input_text_file_path ./datasets/tekgen.txt --start_index 0 --end_index 100
+
+# Resume: process texts 100-199, appending to existing output
+python run.py --input_text_file_path ./datasets/tekgen.txt --start_index 100 --end_index 200 --append
+
+# Process 50 texts starting at index 200
+python run.py --input_text_file_path ./datasets/tekgen.txt --start_index 200 --max_input_texts 50 --append
+```
+
+### Output Format
+
+When using `--append`, results are written in JSONL format (one JSON object per line) to support appending. The output directory is automatically named based on the input dataset (e.g., `./output_webnlg/` for `webnlg.txt`).
 
 ## Evaluation
 

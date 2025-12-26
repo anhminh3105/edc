@@ -210,6 +210,7 @@ dependencies:
   - zlib=1.2.13
   - zstd=1.5.5
   - pip:
+      - faiss-gpu
       - accelerate>=0.25.0
       - bitsandbytes>=0.41.0
       - annotated-types==0.6.0
