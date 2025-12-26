@@ -123,9 +123,26 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--max_input_texts",
-        default=10,
+        default=None,
         type=int,
         help="Maximum number of input texts to process. If not set, all texts are processed.",
+    )
+    parser.add_argument(
+        "--start_index",
+        default=0,
+        type=int,
+        help="Start index for input text processing (0-based, inclusive).",
+    )
+    parser.add_argument(
+        "--end_index",
+        default=None,
+        type=int,
+        help="End index for input text processing (exclusive). If not set, uses start_index + max_input_texts, or processes to end if max_input_texts is also not set.",
+    )
+    parser.add_argument(
+        "--append",
+        action="store_true",
+        help="Append to existing output files instead of failing if output directory exists. Use for resuming interrupted runs.",
     )
     parser.add_argument("--refinement_iterations", default=0, type=int, help="Number of iteration to run.")
     parser.add_argument(
@@ -135,20 +152,34 @@ if __name__ == "__main__":
     )
 
     # Output setting
-    parser.add_argument("--output_dir", default="./output/tmp", help="Directory to output to.")
+    parser.add_argument("--output_dir", default=None, help="Directory to output to. Defaults to ./output_<dataset_name>.")
     parser.add_argument("--logging_verbose", action="store_const", dest="loglevel", const=logging.INFO)
     parser.add_argument("--logging_debug", action="store_const", dest="loglevel", const=logging.DEBUG)
 
     args = parser.parse_args()
     args = vars(args)
+
+    # Set output_dir based on dataset name if not explicitly provided
+    dataset_name = os.path.splitext(os.path.basename(args["input_text_file_path"]))[0]
+    if args["output_dir"] is None:
+        args["output_dir"] = f"./output_{dataset_name}"
+
     edc = EDC(**args)
     
 
     input_text_list = open(args["input_text_file_path"], "r").readlines()
-    if args["max_input_texts"] is not None:
-        input_text_list = input_text_list[:args["max_input_texts"]]
+    start_idx = args["start_index"]
+    end_idx = args["end_index"]
+
+    if end_idx is None:
+        if args["max_input_texts"] is not None:
+            end_idx = start_idx + args["max_input_texts"]
+        # else: end_idx stays None, meaning slice to end
+
+    input_text_list = input_text_list[start_idx:end_idx]
     output_kg = edc.extract_kg(
         input_text_list,
         args["output_dir"],
         refinement_iterations=args["refinement_iterations"],
+        append=args["append"],
     )
