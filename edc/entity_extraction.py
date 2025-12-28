@@ -32,7 +32,7 @@ class EntityExtractor:
                 messages, self.model, self.tokenizer, answer_prepend="Entities: "
             )
         else:
-            completion = llm_utils.openai_chat_completion(self.openai_model, None, messages)
+            completion = llm_utils.openai_chat_completion(None, messages)
         extracted_entities = llm_utils.parse_raw_entities(completion)
         return extracted_entities
 
@@ -50,7 +50,7 @@ class EntityExtractor:
                 messages, self.model, self.tokenizer, answer_prepend="Answer: "
             )
         else:
-            completion = llm_utils.openai_chat_completion(self.openai_model, None, messages)
+            completion = llm_utils.openai_chat_completion(None, messages)
         extracted_entities = llm_utils.parse_raw_entities(completion)
         return extracted_entities
 

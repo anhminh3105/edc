@@ -267,7 +267,7 @@ class EDC:
             canon_candidate_dict_per_entry_list.append(canon_candidate_dict_list)
 
             logger.debug(f"{input_text}\n, {oie_triplets} ->\n {canonicalized_triplets}")
-            logger.debug(f"Retrieved candidate relations {canon_candidate_dict}")
+            logger.debug(f"Retrieved candidate relations {canon_candidate_dict_list}")
         logger.info("Schema Canonicalization finished.")
 
         if free_model:

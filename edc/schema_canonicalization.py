@@ -101,10 +101,10 @@ class SchemaCanonicalizer:
             )
         else:
             verification_result = llm_utils.openai_chat_completion(
-                self.verifier_openai_model, None, messages, max_tokens=1
+                None, messages, max_tokens=1
             )
 
-        if verification_result[0] in choice_letters_list:
+        if verification_result and verification_result[0] in choice_letters_list:
             canonicalized_triplet[1] = candidate_relations[choice_letters_list.index(verification_result[0])]
         else:
             return None

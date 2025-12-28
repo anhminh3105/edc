@@ -24,8 +24,13 @@ if USE_LOCAL_LLM:
             "Run: source export_local_llm.sh"
         )
 else:
-    DEFAULT_LLM = None
-    DEFAULT_EMBEDDER = None 
+    DEFAULT_LLM = os.environ.get("OPENAI_MODEL")
+    # Embedder is still a local sentence transformer, use a sensible default
+    DEFAULT_EMBEDDER = os.environ.get("EMBEDDER_MODEL")
+    if not DEFAULT_EMBEDDER:
+        raise ValueError(
+            "EMBEDDER_MODEL environment variable is not set. "
+        )
 
 if __name__ == "__main__":
     parser = ArgumentParser()

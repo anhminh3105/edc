@@ -96,12 +96,13 @@ def get_embedding_sts(model: SentenceTransformer, text: str, prompt_name=None, p
 
 def parse_raw_entities(raw_entities: str):
     parsed_entities = []
-    left_bracket_idx = raw_entities.index("[")
-    right_bracket_idx = raw_entities.index("]")
     try:
+        left_bracket_idx = raw_entities.index("[")
+        right_bracket_idx = raw_entities.index("]")
         parsed_entities = ast.literal_eval(raw_entities[left_bracket_idx : right_bracket_idx + 1])
-    except Exception as e:
-        pass
+    except (ValueError, SyntaxError) as e:
+        # LLM returned malformed response without proper list format
+        logging.warning(f"Could not parse entities from: {raw_entities[:100]}... Error: {e}")
     logging.debug(f"Entities {raw_entities} parsed as {parsed_entities}")
     return parsed_entities
 
@@ -178,7 +179,7 @@ def is_model_openai(model_name: str) -> bool:
     Check if we should use OpenAI API for the given model.
     
     Returns False if local LLM mode is enabled (USE_LOCAL_LLM=true),
-    otherwise checks if the model name contains 'gpt'.
+    otherwise returns True.
     
     Args:
         model_name: The model name to check
@@ -188,7 +189,7 @@ def is_model_openai(model_name: str) -> bool:
     """
     if USE_LOCAL_LLM:
         return False
-    return "gpt" in model_name.lower()
+    return True
 
 
 def generate_completion_transformers(
@@ -269,5 +270,7 @@ def openai_chat_completion(system_prompt, history, temperature=0.1, max_tokens=5
                 logger.error(f"Max retries ({max_retries}) exceeded. Last error: {e}")
                 raise
             time.sleep(5)
-    logging.debug(f"Model: {model}\nPrompt:\n {messages}\n Result: {response.choices[0].message.content}")
-    return response.choices[0].message.content
+    result = response.choices[0].message.content
+    logging.debug(f"Model: {model}\nPrompt:\n {messages}\n Result: {result}")
+    # Return empty string if content is None to prevent downstream errors
+    return result if result is not None else ""

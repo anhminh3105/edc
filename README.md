@@ -138,16 +138,16 @@ For large datasets, EDC supports processing input texts in chunks with the abili
 python run.py --input_text_file_path ./datasets/example.txt
 
 # Process only the first 100 texts
-python run.py --input_text_file_path ./datasets/tekgen.txt --max_input_texts 100
+python run.py --input_text_file_path ./datasets/webnlg.txt --max_input_texts 100
 
 # Process texts 0-99 (first chunk)
-python run.py --input_text_file_path ./datasets/tekgen.txt --start_index 0 --end_index 100
+python run.py --input_text_file_path ./datasets/webnlg.txt --start_index 0 --end_index 100
 
 # Resume: process texts 100-199, appending to existing output
-python run.py --input_text_file_path ./datasets/tekgen.txt --start_index 100 --end_index 200 --append
+python run.py --input_text_file_path ./datasets/webnlg.txt --start_index 100 --end_index 200 --append
 
 # Process 50 texts starting at index 200
-python run.py --input_text_file_path ./datasets/tekgen.txt --start_index 200 --max_input_texts 50 --append
+python run.py --input_text_file_path ./datasets/webnlg.txt --start_index 200 --max_input_texts 50 --append
 ```
 
 ### Output Format
