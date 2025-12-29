@@ -242,7 +242,7 @@ def openai_chat_completion(system_prompt, history, temperature=0.1, max_tokens=5
     """
     # Route to local LLM if enabled
     if USE_LOCAL_LLM:
-        from edc.utils.local_llm import local_chat_completion
+        from .local_llm import local_chat_completion
         return local_chat_completion(
             system_prompt=system_prompt,
             history=history,

@@ -155,9 +155,9 @@ class LocalLLMManager:
         
         # Load model with quantization
         model_kwargs = {
-            "device_map": "auto",
             "trust_remote_code": True,
             "torch_dtype": torch.float16,
+            "device_map": "auto",
         }
         
         if quantization_config is not None:
