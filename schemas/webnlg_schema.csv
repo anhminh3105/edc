@@ -157,3 +157,10 @@ parentCompany,The subject entity is owned or controlled by the object entity.
 founder,The subject entity was founded or established by the person specified by the object entity.
 president,The subject entity is presided over by the person specified by the object entity.
 ceremonialCounty,The subject entity is part of the ceremonial county specified by the object entity.
+numberOfEmployees,The subject entity has the number of employees as specified by the object entity.
+type,The subject entity is classified as the type specified by the object entity.
+foundationPlace,The subject entity was founded in the location specified by the object entity.
+headquarters,The subject entity has its headquarters in the location specified by the object entity.
+parentOrganization,The subject entity is a subsidiary of the object entity.
+product,The subject entity produces or manufactures the object entity.
+industry,The subject entity operates in the industry specified by the object entity.
