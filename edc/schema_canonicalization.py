@@ -152,7 +152,8 @@ class SchemaCanonicalizer:
 
         if canonicalized_triplet is None:
             # Cannot be canonicalized
-            if enrich:
+            # Only enrich if we have a definition for this relation
+            if enrich and open_relation in open_relation_definition_dict:
                 self.schema_dict[open_relation] = open_relation_definition_dict[open_relation]
                 if "sts_query" in self.embedder.prompts:
                     embedding = self.embedder.encode(
