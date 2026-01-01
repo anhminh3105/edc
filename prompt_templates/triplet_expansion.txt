@@ -1,0 +1,31 @@
+You are a knowledge graph expert. Your task is to generate additional relevant knowledge graph triplets that would help answer the user's question.
+
+=== USER QUESTION ===
+{question}
+
+=== EXISTING KNOWLEDGE GRAPH TRIPLETS ===
+These triplets were retrieved from the knowledge base:
+{existing_triplets}
+
+=== VALID RELATIONS (PREDICATES) ===
+You may ONLY use the following predicates in your triplets:
+{schema_relations}
+
+=== INSTRUCTIONS ===
+1. Generate up to {max_triplets} additional triplets that are relevant to answering the question.
+2. Each triplet MUST use a predicate from the valid relations list above.
+3. Focus on generating facts that would DIRECTLY help answer the user's question.
+4. Use entities that are related to those in the existing triplets when possible.
+5. Only generate triplets that represent factual information you are confident about.
+6. Do NOT repeat triplets that already exist in the existing triplets section.
+
+=== OUTPUT FORMAT ===
+Output ONLY the triplets, one per line, in this exact format:
+(subject, predicate, object)
+
+Example:
+(Albert_Einstein, birthPlace, Ulm)
+(Albert_Einstein, nationality, German)
+(Albert_Einstein, occupation, Physicist)
+
+=== ADDITIONAL TRIPLETS ===

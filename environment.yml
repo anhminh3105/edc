@@ -46,6 +46,7 @@ dependencies:
   - cuda-nvtx=12.1.105
   - cuda-opencl=12.4.127
   - cuda-runtime=12.1.0
+  - cuda-toolkit=12.1
   - datasets=2.12.0
   - debugpy=1.6.7
   - decorator=5.1.1
@@ -209,7 +210,9 @@ dependencies:
   - zlib=1.2.13
   - zstd=1.5.5
   - pip:
-      - accelerate==0.29.1
+      - faiss-gpu
+      - accelerate>=0.26.0,<1.0.0  # <1.0.0 required for bitsandbytes quantization compatibility
+      - bitsandbytes>=0.41.0
       - annotated-types==0.6.0
       - anyio==4.3.0
       - beautifulsoup4==4.12.3

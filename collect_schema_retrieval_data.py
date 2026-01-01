@@ -1,6 +1,7 @@
 import pandas as pd
 import os
 import time
+import logging
 from tqdm import tqdm
 import csv
 import json
@@ -10,6 +11,8 @@ import ast
 from collections import Counter
 from argparse import ArgumentParser
 from datasets import Dataset, DatasetDict
+
+logger = logging.getLogger(__name__)
 
 
 def read_tekgen(tekgen_path):
@@ -68,8 +71,13 @@ def crawl_relation_definitions(json_dict_list, result_csv_path, dataset_size, sl
         dataset_size: Target number of unique relations to collect
         sleep_duration: Time to sleep between API calls (in seconds) to prevent rate limiting
     """
+    logger.info(f"Starting crawl_relation_definitions with dataset_size={dataset_size}, sleep_duration={sleep_duration}")
+    logger.debug(f"Result CSV path: {result_csv_path}")
+    logger.debug(f"Total entries in json_dict_list: {len(json_dict_list)}")
+    
     schema_definition_prompt_template = open("./prompt_templates/sd_template.txt").read()
     schema_definition_few_shot_examples = open("./few_shot_examples/example/sd_few_shot_examples.txt").read()
+    logger.debug("Loaded prompt template and few-shot examples")
 
     # Checkpoint file path (same directory as result, with .checkpoint.json extension)
     checkpoint_path = result_csv_path + ".checkpoint.json"
@@ -78,44 +86,79 @@ def crawl_relation_definitions(json_dict_list, result_csv_path, dataset_size, sl
     last_processed_idx, collected_relations = load_checkpoint(checkpoint_path)
     
     if last_processed_idx >= 0:
-        print(f"Resuming from checkpoint: last processed index = {last_processed_idx}, "
-              f"collected relations = {len(collected_relations)}")
+        logger.info(f"Resuming from checkpoint: last processed index = {last_processed_idx}, "
+                    f"collected relations = {len(collected_relations)}")
+    else:
+        logger.info("No checkpoint found, starting fresh")
 
+    # Check if file needs header (doesn't exist or is empty)
+    needs_header = not os.path.exists(result_csv_path) or os.path.getsize(result_csv_path) == 0
+    
     if not os.path.exists(result_csv_path):
         result_csv = open(result_csv_path, "w")
-        csv_writer = csv.writer(result_csv)
-        csv_writer.writerow(["text", "triplets", "relations", "definitions"])
+        logger.debug(f"Created new result CSV file: {result_csv_path}")
     else:
         result_csv = open(result_csv_path, "a")
-        csv_writer = csv.writer(result_csv)
-
-    progress_bar = tqdm(total=dataset_size, initial=len(collected_relations))
+        logger.debug(f"Appending to existing result CSV file: {result_csv_path}")
     
-    for idx, json_dict in enumerate(json_dict_list):
-        # Skip already processed entries
-        if idx <= last_processed_idx:
-            continue
+    csv_writer = csv.writer(result_csv)
+    
+    # Write header if needed
+    if needs_header:
+        csv_writer.writerow(["text", "triplets", "relations", "definitions"])
+        result_csv.flush()
+        logger.debug("Wrote CSV header")
+
+    total_entries = len(json_dict_list)
+    start_idx = last_processed_idx + 1 if last_processed_idx >= 0 else 0
+    progress_bar = tqdm(total=total_entries, initial=start_idx, desc=f"Processing entries (relations: {len(collected_relations)})")
+    
+    try:
+        for idx, json_dict in enumerate(json_dict_list):
+            # Skip already processed entries
+            if idx <= last_processed_idx:
+                logger.debug(f"Skipping index {idx}: already processed")
+                continue
+                
+            if len(collected_relations) >= dataset_size:
+                logger.info(f"Reached dataset size {dataset_size}, stopping")
+                break
+                
+            triples = json_dict["triples"]
+            skip_flag = False
+            skip_reason = None
             
-        if len(collected_relations) >= dataset_size:
-            break
-        triples = json_dict["triples"]
-        skip_flag = False
-        for triple in triples:
-            # skip quadruples
-            if len(triple) != 3:
-                skip_flag = True
-            relation = triple[1]
-            if relation in collected_relations:
-                # This is already collected, skip
-                skip_flag = True
-        if skip_flag:
-            continue
-        else:
+            for triple in triples:
+                print(triple)
+                # skip quadruples
+                if len(triple) != 3:
+                    logger.debug(f"Index {idx}: skipping due to quadruple (len={len(triple)})")
+                    skip_flag = True
+                    skip_reason = "quadruple"
+                    break
+                relation = triple[1]
+                if relation in collected_relations:
+                    logger.debug(f"Index {idx}: skipping, relation '{relation}' already collected")
+                    skip_flag = True
+                    skip_reason = f"relation '{relation}' already collected"
+                    break
+                    
+            if skip_flag:
+                logger.debug(f"Skipping index {idx}: {skip_reason}")
+                progress_bar.update(1)
+                progress_bar.set_description(f"Processing entries (relations: {len(collected_relations)})")
+                continue
+            
+            # Process this entry
+            new_relations_count = 0
             for triple in triples:
                 relation = triple[1]
                 if relation not in collected_relations:
                     collected_relations.add(relation)
-                    progress_bar.update()
+                    new_relations_count += 1
+                    
+            logger.debug(f"Index {idx}: added {new_relations_count} new relation(s), total={len(collected_relations)}")
+            
             text = json_dict["sentence"]
             triples = json_dict["triples"]
             present_relations = list(set([t[1] for t in triples]))
@@ -129,19 +172,33 @@ def crawl_relation_definitions(json_dict_list, result_csv_path, dataset_size, sl
                 }
             )
 
+            logger.debug(f"Index {idx}: calling LLM API for relations {present_relations}")
             output = llm_utils.openai_chat_completion(
                 system_prompt=None,
                 history=[{"role": "user", "content": filled_first_prompt}],
             )
+            logger.debug(f"Index {idx}: LLM API call successful, output length={len(output) if output else 0}")
+            
             csv_writer.writerow([text, triples, present_relations, output])
             result_csv.flush()
             
             # Save checkpoint after each successful API call
             save_checkpoint(checkpoint_path, idx, collected_relations)
+            logger.debug(f"Index {idx}: checkpoint saved")
+            
+            progress_bar.update(1)
+            progress_bar.set_description(f"Processing entries (relations: {len(collected_relations)})")
             
             # Sleep to prevent rate limiting
             if sleep_duration > 0:
+                logger.debug(f"Sleeping for {sleep_duration} seconds")
                 time.sleep(sleep_duration)
+                
+    except Exception as e:
+        logger.error(f"Error at index {idx}: {e}")
+        progress_bar.close()
+        result_csv.close()
+        raise
     
     progress_bar.close()
     result_csv.close()
@@ -149,7 +206,9 @@ def crawl_relation_definitions(json_dict_list, result_csv_path, dataset_size, sl
     # Remove checkpoint file when completed successfully
     if len(collected_relations) >= dataset_size and os.path.exists(checkpoint_path):
         os.remove(checkpoint_path)
-        print(f"Crawling completed. Checkpoint file removed.")
+        logger.info(f"Crawling completed successfully. Checkpoint file removed.")
+    else:
+        logger.info(f"Crawling finished. Collected {len(collected_relations)} relations.")
 
 
 def collect_samples(df, dataset_size):
@@ -157,12 +216,25 @@ def collect_samples(df, dataset_size):
     # relation_definitions: dict from relation to definitions
     collected_samples = []
 
+    # Skip incomplete rows (missing/blank definitions). We do not retry them.
+    if "definitions" in df.columns:
+        df = df[
+            df["definitions"].notna()
+            & df["definitions"].astype(str).str.strip().ne("")
+        ].reset_index(drop=True)
+
     relation_definition_dict_list = []
     aggregated_relation_definition_dict = {}
 
     for idx, row in df.iterrows():
         raw_definitions = row["definitions"]
         relation_definition_dict = llm_utils.parse_relation_definition(raw_definitions)
+        
+        # Skip rows with no valid definitions (e.g., API failures during crawling)
+        if not relation_definition_dict:
+            relation_definition_dict_list.append({})
+            continue
+            
         relation_definition_dict_list.append(relation_definition_dict)
         for relation, definition in relation_definition_dict.items():
             if relation not in aggregated_relation_definition_dict:
@@ -171,6 +243,10 @@ def collect_samples(df, dataset_size):
                 aggregated_relation_definition_dict[relation].append(definition)
 
     for row_idx, row in df.iterrows():
+        # Skip rows with no valid definitions
+        if not relation_definition_dict_list[row_idx]:
+            continue
+            
         text = row["text"]
         triples = ast.literal_eval(row["triplets"])
 
@@ -194,10 +270,7 @@ def collect_samples(df, dataset_size):
                     relation_triple_dict[relation] = [triple]
                 else:
                     relation_triple_dict[relation].append(triple)
-        # print(len(aggregated_relation_definition_dict))
         negative_relations = set(aggregated_relation_definition_dict.keys()) - positive_relations
-        # print(positive_relations)
-        # print(negative_relations)
         negative_relations = random.sample(list(negative_relations), len(positive_relations))
 
         positive_relations = list(positive_relations)
@@ -217,9 +290,7 @@ def collect_samples(df, dataset_size):
                 "negative_relation": negative_relations[idx],
                 "positive_triple": relation_triple_dict[positive_relations[idx]],
             }
-            # print(sample)
             collected_samples.append(sample)
-            print(sample)
             if len(collected_samples) >= dataset_size:
                 return collected_samples
     return collected_samples
@@ -229,12 +300,21 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--tekgen_path", help="Path to tekgen path")
     parser.add_argument("--relation_definition_csv_path", help="Output path of relation definition of tekgen")
-    parser.add_argument("--dataset_size", default=50000, type=int)
+    parser.add_argument("--dataset_size", default=796982, type=int)
     parser.add_argument("--output_path", default="./schema_retriever_dataset")
     parser.add_argument("--sleep_duration", default=1.0, type=float, 
                         help="Time to sleep between API calls in seconds to prevent rate limiting (default: 1.0)")
+    parser.add_argument("--log_level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+                        help="Logging level (default: INFO)")
 
     args = parser.parse_args()
+
+    # Configure logging
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
 
     tekgen_path = args.tekgen_path
     relation_definition_csv_path = args.relation_definition_csv_path

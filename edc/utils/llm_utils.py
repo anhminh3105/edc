@@ -1,6 +1,6 @@
 import os
-import openai
 import time
+import re
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 import ast
 from sentence_transformers import SentenceTransformer
@@ -11,18 +11,37 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Read environment variables at call time (not import time)
-api_key = os.environ.get("OPENAI_KEY")
-base_url = os.environ.get("OPENAI_API_BASE")
-model = os.environ.get("OPENAI_MODEL")
+# Check if local LLM mode is enabled
+USE_LOCAL_LLM = os.environ.get("USE_LOCAL_LLM", "").lower() == "true"
 
-if not model:
-    raise ValueError("OPENAI_MODEL environment variable is not set. Run: source export_sambanova.sh or source export_google_ai.sh")
-if not api_key:
-    raise ValueError("OPENAI_KEY environment variable is not set.")
+# Only initialize OpenAI client if not using local LLM
+client = None
+model = None
 
-client = openai.OpenAI(api_key=api_key, base_url=base_url)
+if not USE_LOCAL_LLM:
+    import openai
+    
+    # Read environment variables for OpenAI
+    api_key = os.environ.get("OPENAI_KEY")
+    base_url = os.environ.get("OPENAI_API_BASE")
+    model = os.environ.get("OPENAI_MODEL")
 
+    if not model:
+        raise ValueError(
+            "OPENAI_MODEL environment variable is not set. "
+            "Run: source export_sambanova.sh or source export_google_ai.sh, "
+            "or set USE_LOCAL_LLM=true to use local models."
+        )
+    if not api_key:
+        raise ValueError(
+            "OPENAI_KEY environment variable is not set. "
+            "Or set USE_LOCAL_LLM=true to use local models."
+        )
+
+    client = openai.OpenAI(api_key=api_key, base_url=base_url)
+    logger.info(f"Initialized OpenAI client with model: {model}")
+else:
+    logger.info("Local LLM mode enabled. OpenAI client not initialized.")
 
 
 def free_model(model: AutoModelForCausalLM = None, tokenizer: AutoTokenizer = None):
@@ -77,12 +96,13 @@ def get_embedding_sts(model: SentenceTransformer, text: str, prompt_name=None, p
 
 def parse_raw_entities(raw_entities: str):
     parsed_entities = []
-    left_bracket_idx = raw_entities.index("[")
-    right_bracket_idx = raw_entities.index("]")
     try:
+        left_bracket_idx = raw_entities.index("[")
+        right_bracket_idx = raw_entities.index("]")
         parsed_entities = ast.literal_eval(raw_entities[left_bracket_idx : right_bracket_idx + 1])
-    except Exception as e:
-        pass
+    except (ValueError, SyntaxError) as e:
+        # LLM returned malformed response without proper list format
+        logging.warning(f"Could not parse entities from: {raw_entities[:100]}... Error: {e}")
     logging.debug(f"Entities {raw_entities} parsed as {parsed_entities}")
     return parsed_entities
 
@@ -121,6 +141,10 @@ def parse_raw_triplets(raw_triplets: str):
 
 
 def parse_relation_definition(raw_definitions: str):
+    # Handle NaN/None values
+    if not isinstance(raw_definitions, str) or not raw_definitions or raw_definitions.strip() == "":
+        return {}
+    
     descriptions = raw_definitions.split("\n")
     relation_definition_dict = {}
 
@@ -135,13 +159,37 @@ def parse_relation_definition(raw_definitions: str):
         if relation == "Answer":
             continue
 
+        # Strip number prefix (e.g., "1. relation" -> "relation", "2. relation" -> "relation")
+        # This handles cases where the LLM outputs numbered lists like "1. university: ..."
+        if re.match(r"^\d+\.\s*", relation):
+            relation = re.sub(r"^\d+\.\s*", "", relation)
+
         relation_definition_dict[relation] = relation_description
     logger.debug(f"Relation Definitions {raw_definitions} parsed as {relation_definition_dict}")
     return relation_definition_dict
 
 
-def is_model_openai(model_name):
-    return "gpt" in model_name
+def is_local_llm_mode() -> bool:
+    """Check if local LLM mode is enabled."""
+    return USE_LOCAL_LLM
+
+
+def is_model_openai(model_name: str) -> bool:
+    """
+    Check if we should use OpenAI API for the given model.
+    
+    Returns False if local LLM mode is enabled (USE_LOCAL_LLM=true),
+    otherwise returns True.
+    
+    Args:
+        model_name: The model name to check
+        
+    Returns:
+        True if OpenAI API should be used, False for local model
+    """
+    if USE_LOCAL_LLM:
+        return False
+    return True
 
 
 def generate_completion_transformers(
@@ -174,7 +222,35 @@ def generate_completion_transformers(
     return generated_texts
 
 
-def openai_chat_completion(system_prompt, history, temperature=0.1, max_tokens=512, max_retries=3):  
+def openai_chat_completion(system_prompt, history, temperature=0.1, max_tokens=512, max_retries=3):
+    """
+    Generate a chat completion using OpenAI API or local LLM.
+    
+    When USE_LOCAL_LLM=true is set, this function automatically routes
+    to the local LLM manager instead of calling OpenAI API.
+    
+    Args:
+        system_prompt: System prompt for the conversation (can be None for local models,
+                      or the model name when called from existing code)
+        history: List of message dicts with 'role' and 'content' keys
+        temperature: Sampling temperature
+        max_tokens: Maximum tokens to generate
+        max_retries: Maximum retries for API calls (only used with OpenAI)
+        
+    Returns:
+        Generated text response
+    """
+    # Route to local LLM if enabled
+    if USE_LOCAL_LLM:
+        from .local_llm import local_chat_completion
+        return local_chat_completion(
+            system_prompt=system_prompt,
+            history=history,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    
+    # Original OpenAI implementation
     response = None
     if system_prompt is not None:
         messages = [{"role": "system", "content": system_prompt}] + history
@@ -194,5 +270,7 @@ def openai_chat_completion(system_prompt, history, temperature=0.1, max_tokens=5
                 logger.error(f"Max retries ({max_retries}) exceeded. Last error: {e}")
                 raise
             time.sleep(5)
-    logging.debug(f"Model: {model}\nPrompt:\n {messages}\n Result: {response.choices[0].message.content}")
-    return response.choices[0].message.content
+    result = response.choices[0].message.content
+    logging.debug(f"Model: {model}\nPrompt:\n {messages}\n Result: {result}")
+    # Return empty string if content is None to prevent downstream errors
+    return result if result is not None else ""

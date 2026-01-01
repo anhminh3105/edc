@@ -267,7 +267,7 @@ class EDC:
             canon_candidate_dict_per_entry_list.append(canon_candidate_dict_list)
 
             logger.debug(f"{input_text}\n, {oie_triplets} ->\n {canonicalized_triplets}")
-            logger.debug(f"Retrieved candidate relations {canon_candidate_dict}")
+            logger.debug(f"Retrieved candidate relations {canon_candidate_dict_list}")
         logger.info("Schema Canonicalization finished.")
 
         if free_model:
@@ -418,11 +418,12 @@ class EDC:
             del self.loaded_model_dict[self.ee_llm_name]
         return entity_hint_list, relation_hint_list
 
-    def extract_kg(self, input_text_list: List[str], output_dir: str = None, refinement_iterations=0):
+    def extract_kg(self, input_text_list: List[str], output_dir: str = None, refinement_iterations=0, append=False):
         if output_dir is not None:
-            if os.path.exists(output_dir):
-                logger.error(f"Output directory {output_dir} already exists! Quitting.")
+            if os.path.exists(output_dir) and not append:
+                logger.error(f"Output directory {output_dir} already exists! Use --append to continue.")
                 exit()
+            # Create directories only if they don't exist
             for iteration in range(refinement_iterations + 1):
                 pathlib.Path(f"{output_dir}/iter{iteration}").mkdir(parents=True, exist_ok=True)
 
@@ -499,14 +500,19 @@ class EDC:
                     "schema_canonicalizaiton": canon_triplets_list[idx],
                 }
                 json_results_list.append(result_json)
-            result_at_each_stage_file = open(f"{iteration_result_dir}/result_at_each_stage.json", "w")
-            json.dump(json_results_list, result_at_each_stage_file, indent=4)
 
-            final_result_file = open(f"{iteration_result_dir}/canon_kg.txt", "w")
-            for idx, canon_triplets in enumerate(non_null_triplets_list):
-                final_result_file.write(str(canon_triplets))
-                if idx != len(canon_triplets_list) - 1:
-                    final_result_file.write("\n")
-                final_result_file.flush()
+            # Append mode: 'a' for append, 'w' for overwrite
+            write_mode = "a" if append else "w"
+
+            result_at_each_stage_file = open(f"{iteration_result_dir}/result_at_each_stage.json", write_mode)
+            # For JSON append, write one JSON object per line (JSONL format)
+            for result_json in json_results_list:
+                result_at_each_stage_file.write(json.dumps(result_json) + "\n")
+            result_at_each_stage_file.close()
+
+            final_result_file = open(f"{iteration_result_dir}/canon_kg.txt", write_mode)
+            for canon_triplets in non_null_triplets_list:
+                final_result_file.write(str(canon_triplets) + "\n")
+            final_result_file.close()
 
         return canon_triplets_list

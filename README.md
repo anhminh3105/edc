@@ -29,7 +29,34 @@ Our experiments with both automatic and human evaluation demonstrate that EDC ac
 EDC can be iteratively refined with **Schema Retriever**, which is trained in the same fashion as information retriever. It is able to retrieve schema components relevant to the input text. It is able to extract those more obscure schema components harder to identify on the surface. The retrived content, together with entities extracted with *Entity Extraction* and the entities and relations extracted from last run, together form a hint to enhance the performance of open information extraction. To train the **Schema Retriever**, download the TEKGEN dataset from [link](https://storage.googleapis.com/gresearch/kelm-corpus/updated-2021/quadruples-test.tsv) and run
 
 ```
-source export_google_ai.sh && python collect_schema_retrieval_data.py --tekgen_path quadruples-test.tsv --relation_definition_csv_path ./tekgen_relation_definitions --output_path ./output --sleep_duration 12
+source export_google_ai.sh && \
+  python collect_schema_retrieval_data.py \
+      --tekgen_path quadruples-test.tsv \
+      --relation_definition_csv_path ./tekgen_relation_definitions \
+      --output_path ./schema_retriever_dataset \
+      --sleep_duration 20 \
+      --log_level INFO
+```
+
+Below is a general-purpose template you can use to export your LLM service provider credentials as environment variables. Save this as `export_llm_api.sh` and **edit the placeholder values** to correspond to your own credentials and endpoints:
+
+```bash
+#!/bin/bash
+# LLM Service Provider Credentials (OpenAI-compatible endpoint)
+
+export OPENAI_KEY="YOUR_API_KEY_HERE"
+
+# Set your API base endpoint here (example is for Google AI Studio, but change as needed)
+export OPENAI_API_BASE="https://YOUR_PROVIDER_ENDPOINT_HERE/v1/openai/"
+
+# Optionally set the model, e.g. gemini-2.5-flash, gpt-3.5-turbo, etc.
+# export OPENAI_MODEL="YOUR_MODEL_NAME"
+
+# Example echo output (shows partially masked API key and endpoint info)
+echo "LLM service credentials exported successfully"
+echo "  OPENAI_KEY: \${OPENAI_KEY:0:8}..."
+echo "  OPENAI_API_BASE: \$OPENAI_API_BASE"
+echo "  OPENAI_MODEL: \$OPENAI_MODEL"
 ```
 
 to prepare a dataset and refer to [this repository](https://github.com/kamalkraj/e5-mistral-7b-instruct) for how to finetune the model.
@@ -90,7 +117,42 @@ where `oie_llm` can take value from `gpt-3.5-turbo`, `gpt-4` and `mistralai/Mist
 
 You may use EDC on customized input and target schema by following the formats used in `datasets` and `schemas`. You may also tweak the prompt templates and few-shot examples used by changing `prompt_templates` and `few_shot_examples`. To be noted, if you would like to use OpenAI models, please set the environment variable `OPENAI_KEY` to your own API key. An example command to run EDC on an example dataset is given in `run.sh`.
 
+## Chunk-based Processing and Resumable Runs
 
+For large datasets, EDC supports processing input texts in chunks with the ability to resume interrupted runs. This is useful when processing takes a long time or when you want to parallelize across multiple runs.
+
+### Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--start_index` | 0 | Start index for input text processing (0-based, inclusive) |
+| `--end_index` | None | End index for input text processing (exclusive). If not set, uses `start_index + max_input_texts`, or processes to end if `max_input_texts` is also not set |
+| `--max_input_texts` | None | Maximum number of input texts to process from `start_index` |
+| `--append` | False | Append to existing output files instead of failing if output directory exists |
+| `--output_dir` | None | Output directory. Defaults to `./output_{dataset_name}` based on the input file name |
+
+### Examples
+
+```bash
+# Process all texts from example.txt (outputs to ./output_example/)
+python run.py --input_text_file_path ./datasets/example.txt
+
+# Process only the first 100 texts
+python run.py --input_text_file_path ./datasets/webnlg.txt --max_input_texts 100
+
+# Process texts 0-99 (first chunk)
+python run.py --input_text_file_path ./datasets/webnlg.txt --start_index 0 --end_index 100
+
+# Resume: process texts 100-199, appending to existing output
+python run.py --input_text_file_path ./datasets/webnlg.txt --start_index 100 --end_index 200 --append
+
+# Process 50 texts starting at index 200
+python run.py --input_text_file_path ./datasets/webnlg.txt --start_index 200 --max_input_texts 50 --append
+```
+
+### Output Format
+
+When using `--append`, results are written in JSONL format (one JSON object per line) to support appending. The output directory is automatically named based on the input dataset (e.g., `./output_webnlg/` for `webnlg.txt`).
 
 ## Evaluation
 
